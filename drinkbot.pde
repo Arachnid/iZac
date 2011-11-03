@@ -112,11 +112,10 @@ void send_response(struct android_response_t *msg) {
   Serial.print(", progress=");
   Serial.print((int)msg->progress);
   Serial.println();
-#ifdef USE_ANDROID
+
   int ret = acc.write(msg, sizeof(android_response_t));
   Serial.print("Write returned status ");
   Serial.println(ret, HEX);
-#endif
 }
 
 uint32_t read_scale() {
@@ -175,7 +174,7 @@ void wait_command() {
 }
 
 void dispense_command(int target, int amount) {
-  if(target > num_dispensers) {
+  if(target >= num_dispensers) {
     android_response_t response = {40, 0};
     send_response(&response);
     return;
