@@ -245,18 +245,12 @@ void handle_request(struct android_request_t *request) {
 }
 
 void android_read() {
-  static char buf[sizeof(android_request_t)];
-  static int bytes_read = 0;
+  android_request_t request;
   
   if(acc.isConnected()) {
-    int len;
-    while((len = acc.read(buf + bytes_read,
-           sizeof(android_request_t) - bytes_read, 1)) > 0) {
-      bytes_read += len;
-      if(bytes_read == sizeof(android_request_t)) {
-        handle_request((android_request_t*)*buf);
-        bytes_read = 0;
-      }
+    int len = acc.read(&request, sizeof(request), 1);
+    if(len == sizeof(request)) {
+      handle_request(&request);
     }
   }
 }
