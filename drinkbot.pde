@@ -5,16 +5,12 @@
 
 void handle_request(android_request_t *request);
 
-#define USE_ANDROID 1
-
-#ifdef USE_ANDROID
 AndroidAccessory acc("Google, Inc.",
                      "iZac",
                      "A robot that makes drinks for you",
                      "0.1",
                      "http://www.android.com/",
                      "ec4a9267-0b5a-43e2-a52d-7d7b46c0c02c");
-#endif
 
 const int slew_delay = 50;
 const int scale_divisor = 515;
@@ -92,9 +88,7 @@ void setup() {
   Serial.begin(19200);
   setup_turntables();
   Serial.println("Ready.");
-#ifdef USE_ANDROID
   acc.powerOn();
-#endif
 }
 
 void read_line(char *buf, char terminator) {
@@ -251,37 +245,46 @@ void handle_request(struct android_request_t *request) {
   }
 }
 
-#ifdef USE_ANDROID
-void handle_android_request() {
-  android_request_t request;
-  char *buf_ptr = (char *)&request;
-  int total_len = 0;
+void android_read() {
+  static char buf[sizeof(android_request_t)];
+  static int bytes_read = 0;
+  
   if(acc.isConnected()) {
-    Serial.println("Waiting for command from Android.");
-    while(total_len < sizeof(request)) {
-      int len = acc.read(buf_ptr + total_len, sizeof(request) - total_len, 1);
-      if(len > 0)
-        total_len += len;
+    int len;
+    while((len = acc.read(buf + bytes_read,
+           sizeof(android_request_t) - bytes_read, 1)) > 0) {
+      bytes_read += len;
+      if(bytes_read == sizeof(android_request_t)) {
+        handle_request((android_request_t*)*buf);
+        bytes_read = 0;
+      }
     }
-    handle_request(&request);
   }
 }
-#endif
 
-void handle_serial_request() {
-  char buf[32];
-  android_request_t request;
-
-  read_line(buf, '\n');
-  sscanf(buf, "%c %hhd %hd", &request.command, &request.target, &request.value);
-  handle_request(&request);
+void serial_read() {
+  static char buf[32];
+  static char pos = 0;
+  
+  while(Serial.available()) {
+    int cur = Serial.read();
+    if(cur < 0)
+      return;
+    if(cur == '\n') {
+      android_request_t request;
+      buf[pos] = '\0';
+      sscanf(buf, "%c %hhd %hd",
+             &request.command, &request.target, &request.value);
+      handle_request(&request);
+      pos = 0;
+    } else {
+      buf[pos++] = cur;
+    }
+  }
 }
 
 void loop() {
-#ifdef USE_ANDROID
-  handle_android_request();
-#else
-  handle_serial_request();
-#endif
+  android_read();
+  serial_read();
 }
 
