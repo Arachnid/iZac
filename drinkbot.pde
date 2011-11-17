@@ -13,18 +13,20 @@ AndroidAccessory acc("Google, Inc.",
                      "ec4a9267-0b5a-43e2-a52d-7d7b46c0c02c");
 
 const int slew_delay = 50;
-const int scale_divisor = 515;
+const int scale_divisor = 501;
 
 typedef struct {
   int turntable_pin;
   int pump_pin;
   int position;
+  int rest_position;
   Servo servo;
 } turntable_t;
 
 turntable_t turntables[] = {
-  //turntable_pin, pump_pin, position
-  { 10,            8,        150},
+  //turntable_pin, pump_pin, position, rest_position
+  { 10,            8,        165,      165},
+  { 5,             3,        165,      165},
   NULL
 };
 
@@ -41,7 +43,10 @@ dispenser_t dispensers[] = {
   //turntable_num, turntable_pos, valve_pin, valve_open_pos, valve_close_pos
   {0,              178,            12,       170,            75},
   {0,              150,            9,        170,            76},
-  {0,              121,            11,       170,            90},
+  {0,              122,            11,       170,            90},
+  {1,              178,            7,        160,            82},
+  {1,              145,            4,        170,            85},
+  {1,              114,            6,        170,            91},
   NULL
 };
 
@@ -57,6 +62,7 @@ typedef struct android_response_t {
 } android_response_t;
 
 int num_dispensers = 0; // Initialized in init()
+int last_turntable = 0; // Last turntable used to mix a drink
 
 void setup_turntables() {
   for(turntable_t *t = turntables; t->turntable_pin != 0; t++) {
@@ -89,6 +95,7 @@ void setup() {
   setup_turntables();
   Serial.println("Ready.");
   acc.powerOn();
+  analogReference(EXTERNAL);
 }
 
 void read_line(char *buf, char terminator) {
@@ -186,6 +193,13 @@ void dispense_command(int target, int amount) {
   Serial.println(target);
 
   dispenser_t *dispenser = &dispensers[target];
+  
+  // Get the other turntable out of the way
+  if(dispenser->turntable_num != last_turntable) {
+    do_turn(last_turntable,
+            turntables[last_turntable].rest_position);
+    last_turntable = dispenser->turntable_num;
+  }
   do_pump(dispenser->turntable_num, HIGH);
   do_turn(dispenser->turntable_num, dispenser->turntable_pos);
   delay(2000);
@@ -215,6 +229,16 @@ void dispense_command(int target, int amount) {
   send_response(&response);
 }
 
+void do_read_scale() {
+  int32_t value = read_scale();
+  int32_t grams = (value * 10) / scale_divisor;
+  Serial.print("Scale reads ");
+  Serial.print(grams);
+  Serial.print(" grams (");
+  Serial.print(value);
+  Serial.println(").");
+}
+
 void handle_request(struct android_request_t *request) {
   Serial.print("Command: ");
   Serial.print((char)request->command);
@@ -240,6 +264,9 @@ void handle_request(struct android_request_t *request) {
     break;
   case 'v':
     do_valve(request->target, request->value);
+    break;
+  case 's':
+    do_read_scale();
     break;
   }
 }
